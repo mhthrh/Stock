@@ -1,0 +1,65 @@
+{
+  "AppName": "GeneralLedger",
+  "IsTest": true,
+  "Version": "1.0.0",
+  "ExpireDate": "01-01-2023",
+  "DB": [
+    {
+      "Name": "PostgresSQL",
+      "Host": "127.0.0.1",
+      "Port": 5432,
+      "User": {
+        "UserName": "postgres",
+        "Password": "123456"
+      },
+      "Dbname": "Stock",
+      "Driver": "postgres"
+    },
+    {
+      "Name": "Oracle",
+      "Host": "127.0.0.1",
+      "Port": 1501,
+      "User": {
+        "UserName": "admin",
+        "Password": "admin"
+      },
+      "Dbname": "",
+      "Driver": "OraDB"
+    }
+  ],
+  "Ftp": [
+    {
+      "FtpName": "MyFtp",
+      "IP": "127.0.0.1",
+      "Port": 21,
+      "User": {
+        "UserName": "FtpUser",
+        "Password": "FtpPAss"
+      }
+    },
+    {
+      "FtpName": "YourFtp",
+      "IP": "127.0.0.1",
+      "Port": 21,
+      "User": {
+        "UserName": "admin",
+        "Password": "admin"
+      }
+    }
+  ],
+  "Thread": {
+    "MinThread": 1,
+    "MaxThread": 25
+  },
+  "SignUp": {
+    "User": {
+      "UserName": "admin",
+      "Password": "admin"
+    },
+    "Role": "Admin"
+  },
+  "Server": {
+    "IP": "localhost",
+    "Port": 8585
+  }
+}

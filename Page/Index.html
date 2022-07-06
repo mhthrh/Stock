@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <style>
+        * {
+            box-sizing: border-box;
+        }
+
+        .row {
+            display: flex;
+        }
+
+        .column {
+            flex: 50%;
+            padding: 10px;
+        }
+    </style>
+</head>
+<body>
+
+
+
+<h2>Api Services</h2>
+<br>
+<br>
+<div>
+    <label id="LBLResult"></label>
+</div>
+    <div class="row">
+    <div class="column" style="background-color:#aaa;">
+        <label>Country: </label><input id="InpUserCountry">
+        <br>
+        <br>
+        <label>User Name: </label><input id="InpUserNameSignIn">
+        <br>
+        <br>
+        <label>Password: </label><input id="InpPasswordSignIn">
+        <br>
+        <br>
+        <button id="BtnSignIn">SignIn</button>
+
+    </div>
+    <div class="column" style="background-color:#ccc;">
+
+        <label>SKU: </label><input id="SKU">
+        <br>
+        <br>
+        <label>Token: </label><input id="token">
+        <br>
+        <br>
+
+            <button id="BtnFind">Send</button>
+        </div>
+    <div class="column" style="background-color:#bbb;">
+    <form
+            enctype="multipart/form-data"
+            action="http://localhost:9999/bulk"
+            method="post"
+    >
+        <input type="file" name="myFile" />
+        <input type="submit" value="upload" />
+    </form>
+
+</div>
+    <div class="column" style="background-color:#ddd;">
+        <label>SKU: </label><input id="SKUInp">
+        <br>
+        <br>
+        <label>Name : </label> <input id="Name" >
+        <br>
+        <br>
+        <label>Count : </label> <input id="Count" >
+        <br>
+        <br>
+        <button id="BtnSend">Search</button>
+    </div>
+
+</div>
+
+<script >
+
+    document.getElementById("BtnSignIn").addEventListener("click", (e) => {
+        let Country = document.getElementById("InpUserCountry");
+        let User = document.getElementById("InpUserNameSignIn");
+        let Pass = document.getElementById("InpPasswordSignIn");
+        fetch('http://localhost:9999/signIn', {
+            method: 'POST',
+            headers: {
+                "Content-Type": "application/json; charset=UTF-8",
+            },
+            body: JSON.stringify({
+                "countryCode"   :Country.value,
+                "username"   :User.value,
+                "password"   :Pass.value,
+            }),
+        })
+            .then(function (response){
+                return response.text()
+            })
+            .then(function (data){
+                console.log(data)
+                document.getElementById('LBLResult').innerHTML = data;
+            });
+    })
+    document.getElementById("BtnFind").addEventListener("click", (e) => {
+        fetch('http://localhost:9999/get', {
+            method: 'POST',
+            headers: {
+                "Content-Type": "application/json; charset=UTF-8",
+            },
+            body: JSON.stringify({
+                "sku"  :document.getElementById("SKU").value,
+                "token"  :document.getElementById("token").value
+            }),
+        })
+            .then(function (response){
+                return response.text()
+            })
+            .then(function (data){
+                console.log(data)
+                document.getElementById('LBLResult').innerHTML = data;
+            });
+    })
+    document.getElementById("BtnSend").addEventListener("click", (e) => {
+        console.log(document.getElementById("selectType").value)
+        fetch('http://localhost:9999/put', {
+            method: 'POST',
+            headers: {
+                "Content-Type": "application/json; charset=UTF-8",
+            },
+
+            body:
+                JSON.stringify({
+                        "sku"   : document.getElementById("SKUInp").value,
+                        "name"   : document.getElementById("Name").value,
+                        "Count"   :parseInt(document.getElementById("Count").value)
+                }),
+        })
+            .then(function (response){
+                return response.text()
+            })
+            .then(function (data){
+                console.log(data)
+                document.getElementById('LBLResult').innerHTML = data;
+
+            });
+    })
+
+
+</script>
+</body>
+</html>
