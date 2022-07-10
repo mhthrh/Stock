@@ -1,9 +1,7 @@
 package Stock
 
 import (
-	"Github.com/mhthrh/Stock/Utilitys/DbUtil/DbPool"
 	"Github.com/mhthrh/Stock/Utilitys/DbUtil/PgSql"
-	"context"
 	"database/sql"
 	"fmt"
 	"github.com/google/uuid"
@@ -17,11 +15,25 @@ type Stock struct {
 	Name    string
 	SKU     string
 	Count   int64
+	Result  string
 }
 
+type Message struct {
+	slice []Stock
+	cnn   *sql.Tx
+}
 type Search struct {
-	token string `json:"token" validate:"required,alphanum"`
-	Sku   string `json:"sku" validate:"required,alphanum"`
+	Username string `json:"username" validate:"required"`
+	Token    string `json:"token" validate:"required,base64"`
+	Sku      string `json:"sku" validate:"required,alphanum"`
+	Country  string `json:"country"`
+}
+type Item struct {
+	Username string `json:"username" validate:"required"`
+	Name     string `json:"name" validate:"required"`
+	Token    string `json:"token" validate:"required,base64"`
+	Sku      string `json:"sku" validate:"required,alphanum"`
+	Count    int    `json:"count" validate:"required,numeric,gt=0"`
 }
 type tool struct {
 	db *sql.DB
@@ -36,54 +48,56 @@ func New(db *sql.DB) *tool {
 	return &tool{db: db}
 }
 
-func (t *tool) Get(s *Search) (Stock, error) {
-	var st Stock
-	rows, err := PgSql.RunQuery(t.db, fmt.Sprintf("SELECT \"ID\", \"UserName\" FROM public.\"Users\" where \"UserName\"='%s' and \"Password\"='%s'", s.Sku, s.token))
+func (t *tool) Search(s *Search) (Stock, error) {
+	var result Stock
+	rows, err := PgSql.RunQuery(t.db, fmt.Sprintf("SELECT  c.name, s.name, s.sku, s.count FROM public.stock s inner join  public.country c on s.country=c.shortname where s.country='%s' and s.sku='%s'", s.Country, s.Sku))
+	defer rows.Close()
 	if err != nil {
 		return Stock{}, err
 	}
 
 	if rows.Next() {
-		rows.Scan(&st.Name, &st.SKU, &st.Country)
-		return st, nil
+		rows.Scan(&result.Country, &result.Name, &result.SKU, &result.Count)
+		return result, nil
 	}
 
 	return Stock{}, fmt.Errorf("cant find sku")
 }
-func (t *tool) Put(s *Search) (Stock, error) {
-	var st Stock
-	rows, err := PgSql.RunQuery(t.db, fmt.Sprintf("SELECT \"ID\", \"UserName\" FROM public.\"Users\" where \"UserName\"='%s' and \"Password\"='%s'", s.Sku, s.token))
+func (t *tool) Put(i *Item) error {
+
+	result, err := PgSql.ExecuteCommand(fmt.Sprintf("insert into "), t.db)
 	if err != nil {
-		return Stock{}, err
+		return err
 	}
 
-	if rows.Next() {
-		rows.Scan(&st.Name, &st.SKU, &st.Country)
-		return st, nil
+	count, err := (*result).RowsAffected()
+	if err != nil {
+		return err
 	}
-
-	return Stock{}, fmt.Errorf("cant find sku")
+	if count != 1 {
+		return fmt.Errorf("not added")
+	}
+	return nil
 }
+func (t *tool) Bulk(stock []Stock) ([]Stock, error) {
 
-func Bulk(stock []Stock, db *DbPool.DBs) {
-	defer func() {
-		d := recover()
-		fmt.Println(d)
-	}()
-	const thread = 10
-	//var ctx context.Context
-	chn := make(chan bool, 10000)
+	const GoRoutines = 40
+	var k, j int
+	step := len(stock) / GoRoutines
+	j = step
+	chn := make(chan Message)
 	commit := true
-
+	var t2 []Stock
 	sort.SliceStable(stock, func(i, j int) bool {
 		return stock[i].Count > stock[j].Count
 	})
-	cnn := db.Pull()
-	transaction, err := cnn.Db.Begin()
+
+	transaction, err := t.db.Begin()
 	if err != nil {
-		return
+		return nil, err
 	}
 	defer func(tx *sql.Tx) {
+		fmt.Println("transactions ", commit)
 		if !commit {
 			tx.Rollback()
 			return
@@ -92,58 +106,68 @@ func Bulk(stock []Stock, db *DbPool.DBs) {
 
 	}(transaction)
 
-	ctx, _ := context.WithTimeout(context.WithValue(context.Background(), 1, stock[0:]), time.Second*25)
-	insert(transaction, ctx, 1, &chn)
+	for i := 0; i < GoRoutines; i++ {
 
-	select {
-	case <-ctx.Done():
-		commit = false
-	case <-chn:
-		commit = true
+		go t.insert(chn)
+		chn <- Message{
+			slice: stock[k:j],
+			cnn:   transaction,
+		}
+		k = j
+		if j+step > len(stock) {
+			j = len(stock)
+		} else {
+			j = j + step
+		}
+
 	}
 
+	for i := 0; i < GoRoutines; i++ {
+		result := <-chn
+		t2 = append(t2, result.slice...)
+	}
+	return t2, nil
 }
+func (t *tool) insert(chn chan Message) {
 
-func insert(t *sql.Tx, c context.Context, i int, chn *chan bool) {
-	stock := c.Value(i).([]Stock)
-	count := 0
-	for _, s := range stock {
-
-		rows := t.QueryRow(fmt.Sprintf("SELECT Count(*) FROM public.stock where country='%s' and sku='%s'", s.Country, s.SKU))
-		if err := rows.Scan(&count); err != nil {
-			c.Done()
+	var trans *sql.Tx
+	var stocks []Stock
+	select {
+	case msg := <-chn:
+		trans = msg.cnn
+		stocks = msg.slice
+	}
+	defer func() {
+		chn <- Message{
+			slice: stocks,
+			cnn:   trans,
 		}
-		if count == 0 {
-			u, _ := uuid.NewUUID()
-			r, err := t.Exec(fmt.Sprintf("INSERT INTO public.stock( id, country, name, sku, Count) VALUES ('%s', '%s', '%s', '%s', '%d')", u, s.Country, s.Name, s.SKU, s.Count))
-			if err != nil {
-				c.Done()
-			}
-			i, err := r.RowsAffected()
-			if err != nil {
-				c.Done()
 
-			}
-			if i != 1 {
-				c.Done()
-			}
+	}()
+	for index, s := range stocks {
+
+		u, _ := uuid.NewUUID()
+		result, err := trans.Exec(fmt.Sprintf("INSERT INTO public.stock( id, country, name, sku, Count) SELECT '%s', '%s', '%s', '%s', '%d' WHERE NOT EXISTS (SELECT id FROM public.stock where country='%s' and sku='%s')", u, s.Country, s.Name, s.SKU, s.Count, s.Country, s.SKU))
+		if err != nil {
+			s.Result = err.Error()
 			continue
 		}
-		r, err := t.Exec(fmt.Sprintf("UPDATE public.stock SET  Count=Count+'%d' WHERE country='%s' and sku='%s'", s.Count, s.Country, s.SKU))
+		i, err := result.RowsAffected()
 		if err != nil {
-			c.Done()
-			return
+			s.Result = err.Error()
+			continue
 		}
-
-		i, err := r.RowsAffected()
-		if err != nil {
-			c.Done()
-			return
-		}
-		if i != 1 {
-			c.Done()
-			return
+		if i == 0 {
+			ddd := fmt.Sprintf("UPDATE public.stock SET  Count=Count+'%d' WHERE country='%s' and sku='%s'", s.Count, s.Country, s.SKU)
+			_, err = trans.Exec(ddd)
+			if err != nil {
+				s.Result = err.Error()
+				continue
+			}
+			stocks[index].Result = "Updated"
+		} else {
+			stocks[index].Result = "Inserted"
 		}
 	}
-	*chn <- true
+
 }

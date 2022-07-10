@@ -6,7 +6,7 @@ require (
 	github.com/go-playground/validator v9.31.0+incompatible
 	github.com/google/uuid v1.0.0
 	github.com/gorilla/mux v1.8.0
-	github.com/lib/pq v1.10.2
+	github.com/lib/pq v1.10.6
 	github.com/pborman/uuid v1.2.1
 	github.com/sirupsen/logrus v1.8.1
 )

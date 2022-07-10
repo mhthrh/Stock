@@ -57,18 +57,62 @@ func (t *tool) GenerateSignKey(CountryCode, userName string, validationDuration 
 	j.Encrypt()
 	return j.Result
 }
-func (t *tool) CheckSignKey(signedKey string) ([]string, error) {
-
+func (t *tool) CheckSignKey(user, token string) (bool, error) {
+	var count int
 	k := CryptoUtil.NewKey()
-	k.Text = signedKey
+	k.Text = token
 	err := k.Decrypt()
 	if err != nil {
-		return nil, err
+		return false, err
 	}
 	spl := strings.Split(k.Result, "#")
-	if len(spl) > 1 {
-		return spl, nil
+	if len(spl) != 3 {
+		return false, fmt.Errorf("error in sign key")
 	}
-	return nil, fmt.Errorf("error in sign key")
 
+	rows, err := t.db.Query(fmt.Sprintf("select count(*) from public.country where shortname='%s'", spl[0]))
+	defer rows.Close()
+	if err != nil {
+		return false, fmt.Errorf("error in sign key")
+	}
+	if rows.Next() {
+		rows.Scan(&count)
+	}
+	if count != 1 {
+		return false, fmt.Errorf("country not found")
+	}
+	if user != spl[1] {
+		return false, fmt.Errorf("user not found")
+	}
+	rows, err = t.db.Query(fmt.Sprintf("select count(*) from  public.\"Users\" where \"UserName\"='%s'", spl[1]))
+	defer rows.Close()
+	if err != nil {
+		return false, fmt.Errorf("error in sign key")
+	}
+	if rows.Next() {
+		rows.Scan(&count)
+	}
+	if count != 1 {
+		return false, fmt.Errorf("user not found")
+	}
+	signedTime, err := time.Parse(time.UnixDate, spl[2])
+	if time.Now().Before(signedTime) {
+		return true, nil
+	}
+	return false, fmt.Errorf("token has been expierd")
+
+}
+
+func (t *tool) GetCountry(token string) (string, error) {
+	k := CryptoUtil.NewKey()
+	k.Text = token
+	err := k.Decrypt()
+	if err != nil {
+		return "", err
+	}
+	spl := strings.Split(k.Result, "#")
+	if len(spl) != 3 {
+		return "", fmt.Errorf("parsing error")
+	}
+	return spl[0], nil
 }

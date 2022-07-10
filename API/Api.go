@@ -16,7 +16,7 @@ func RunApiOnRouter(sm *mux.Router, log *logrus.Entry, db *DbPool.DBs) {
 
 	postR.HandleFunc("/signIn", controller.SignIn)
 	postR.HandleFunc("/bulk", controller.Bulk)
-	postR.HandleFunc("/get", controller.Get)
+	postR.HandleFunc("/search", controller.Search)
 	postR.HandleFunc("/put", controller.Put)
 
 	getR := sm.Methods(http.MethodGet).Subrouter()

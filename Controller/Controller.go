@@ -11,7 +11,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/pborman/uuid"
 	"github.com/sirupsen/logrus"
+	"mime/multipart"
 	"net/http"
 	"strconv"
 	"strings"
@@ -35,6 +37,10 @@ type Controller struct {
 	logger     *logrus.Entry
 	validation *ValidationUtil.Validation
 	db         *DbPool.DBs
+}
+type authenticate struct {
+	User  string `json:"user"`
+	Token string `json:"token"`
 }
 
 func New(l *logrus.Entry, v *ValidationUtil.Validation, db *DbPool.DBs) *Controller {
@@ -62,16 +68,85 @@ func (c *Controller) MiddleWare(next http.Handler) http.Handler {
 				j := JsonUtil.New(nil, nil).Struct2Json(ValidationError{Messages: errs.Errors()}.Messages)
 				Result.New(1004, http.StatusUnprocessableEntity, j).SendResponse(w)
 			}
-
 			r = r.WithContext(context.WithValue(r.Context(), Key{}, obj1))
 			next.ServeHTTP(w, r)
 		case "/bulk":
-			//obj = Stock.Stock{}
-			//cnt, cancel := context.WithTimeout(context.WithValue(r.Context(), Key{}, obj), timeOut)
-			//defer cancel()
-			//r = r.WithContext(cnt)
+			aut := authenticate{}
+			json.Unmarshal([]byte(r.FormValue("aut")), &aut)
+			d := c.db.Pull()
+			_, err := User.New(d.Db).CheckSignKey(aut.User, aut.Token)
+			if err != nil {
+				Result.New(1, http.StatusOK, err.Error()).SendResponse(w)
+				return
+			}
+			c.db.Push(d)
+
+			file, handler, err := r.FormFile("file")
+			defer file.Close()
+			if err != nil {
+				Result.New(1, http.StatusOK, err.Error()).SendResponse(w)
+				return
+			}
+			d = c.db.Pull()
+			if err := fileCheck(handler, d); err != nil {
+				Result.New(1, http.StatusOK, err.Error()).SendResponse(w)
+				return
+			}
+			c.db.Push(d)
+			ctx := context.WithValue(r.Context(), Key{}, file)
+			r = r.WithContext(ctx)
 			next.ServeHTTP(w, r)
-		case "/2":
+		case "/search":
+			var obj1 Stock.Search
+			err := json.NewDecoder(r.Body).Decode(&obj1)
+			if err != nil {
+				Result.New(1003, http.StatusBadRequest, GenericError{Message: err.Error()}.Message).SendResponse(w)
+				return
+			}
+			d := c.db.Pull()
+			_, err = User.New(d.Db).CheckSignKey(obj1.Username, obj1.Token)
+			if err != nil {
+				Result.New(1, http.StatusOK, err.Error()).SendResponse(w)
+				return
+			}
+			country, err := User.New(d.Db).GetCountry(obj1.Token)
+			if err != nil {
+				Result.New(1, http.StatusOK, err.Error()).SendResponse(w)
+				return
+			}
+			obj1.Country = country
+			c.db.Push(d)
+			errs := c.validation.Validate(obj1)
+			if len(errs) > 0 {
+				j := JsonUtil.New(nil, nil).Struct2Json(ValidationError{Messages: errs.Errors()}.Messages)
+				Result.New(1004, http.StatusUnprocessableEntity, j).SendResponse(w)
+			}
+			r = r.WithContext(context.WithValue(r.Context(), Key{}, obj1))
+			next.ServeHTTP(w, r)
+		case "/put":
+			var obj1 Stock.Item
+			err := json.NewDecoder(r.Body).Decode(&obj1)
+			if err != nil {
+				Result.New(1003, http.StatusBadRequest, GenericError{Message: err.Error()}.Message).SendResponse(w)
+				return
+			}
+			d := c.db.Pull()
+			_, err = User.New(d.Db).CheckSignKey(obj1.Username, obj1.Token)
+			if err != nil {
+				Result.New(1, http.StatusOK, err.Error()).SendResponse(w)
+				return
+			}
+			c.db.Push(d)
+			errs := c.validation.Validate(obj1)
+			if len(errs) > 0 {
+				j := JsonUtil.New(nil, nil).Struct2Json(ValidationError{Messages: errs.Errors()}.Messages)
+				Result.New(1004, http.StatusUnprocessableEntity, j).SendResponse(w)
+			}
+			r = r.WithContext(context.WithValue(r.Context(), Key{}, obj1))
+			next.ServeHTTP(w, r)
+		default:
+			Result.New(1, http.StatusNotFound, "address not found").SendResponse(w)
+
 		}
 	})
 }
@@ -88,29 +163,16 @@ func (c *Controller) SignIn(w http.ResponseWriter, r *http.Request) {
 	}
 	Result.New(1, http.StatusOK, JsonUtil.New(nil, nil).Struct2Json(response)).SendResponse(w)
 }
-
 func (c *Controller) Bulk(w http.ResponseWriter, r *http.Request) {
-	defer func() {
-		dd := recover()
-		fmt.Println(dd)
-	}()
+
 	var Lines []Stock.Stock
 	var line Stock.Stock
 	var skip bool
-	file, handler, err := r.FormFile("myFile")
-	if err != nil {
-		fmt.Println("Error Retrieving the File")
-		fmt.Println(err)
-		return
-	}
-	defer file.Close()
-	fmt.Printf("Uploaded File: %+v\n", handler.Filename)
-	fmt.Printf("File Size: %+v\n", handler.Size)
-	fmt.Printf("MIME Header: %+v\n", handler.Header)
 
-	if err != nil {
-		fmt.Println(err)
-	}
+	//csvReader := csv.NewReader(file)
+	//records, err := csvReader.ReadAll()
+
+	file := r.Context().Value(Key{}).(multipart.File)
 	scanner := bufio.NewScanner(file)
 
 	for scanner.Scan() {
@@ -118,22 +180,27 @@ func (c *Controller) Bulk(w http.ResponseWriter, r *http.Request) {
 			skip = !skip
 			continue
 		}
-		spl := strings.Split(strings.Replace(scanner.Text(), "\"", "", -1), ",")
-		line.Country = spl[0]
-		line.SKU = spl[1]
-		line.Name = spl[2]
-		line.Count, _ = strconv.ParseInt(spl[3], 10, 64)
+		spl := strings.Split(scanner.Text(), "\",\"")
+		line.Country = strings.Replace(spl[0], "\"", "", -1)
+		line.SKU = strings.Replace(spl[1], "\"", "", -1)
+		line.Name = strings.Replace(spl[2], "\"", "", -1)
+		line.Count, _ = strconv.ParseInt(strings.Replace(spl[3], "\"", "", -1), 10, 64)
 		Lines = append(Lines, line)
 	}
-	Stock.Bulk(Lines, c.db)
+	d := c.db.Pull()
+	rr, err := Stock.New(d.Db).Bulk(Lines)
+	c.db.Push(d)
+	if err == nil {
+		Result.New(1, http.StatusOK, JsonUtil.New(nil, nil).Struct2Json(rr)).SendResponse(w)
+	}
 
 }
-func (c *Controller) Get(w http.ResponseWriter, r *http.Request) {
+func (c *Controller) Search(w http.ResponseWriter, r *http.Request) {
 	s := r.Context().Value(Key{}).(Stock.Search)
 
 	d := c.db.Pull()
-	stock, err := Stock.New(d.Db).Get(&s)
-
+	stock, err := Stock.New(d.Db).Search(&s)
+	c.db.Push(d)
 	if err != nil {
 		Result.New(1010, http.StatusBadRequest, err.Error()).SendResponse(w)
 		return
@@ -141,5 +208,30 @@ func (c *Controller) Get(w http.ResponseWriter, r *http.Request) {
 	Result.New(1, http.StatusOK, JsonUtil.New(nil, nil).Struct2Json(stock)).SendResponse(w)
 }
 func (c *Controller) Put(w http.ResponseWriter, r *http.Request) {
+	s := r.Context().Value(Key{}).(Stock.Item)
 
+	d := c.db.Pull()
+	err := Stock.New(d.Db).Put(&s)
+
+	if err != nil {
+		Result.New(1010, http.StatusBadRequest, err.Error()).SendResponse(w)
+		return
+	}
+	Result.New(1, http.StatusOK, "item inserted").SendResponse(w)
+}
+
+func fileCheck(h *multipart.FileHeader, d *DbPool.DB) error {
+	var count int
+	err := d.Db.QueryRow(fmt.Sprintf("select count(*) from public.files where name='%s'", h.Filename)).Scan(&count)
+	if err != nil {
+		return err
+	}
+	if count != 0 {
+		return fmt.Errorf("file alredy exist")
+	}
+	_, err = d.Db.Exec(fmt.Sprintf("INSERT INTO public.files(id, name, size, type, datetime)VALUES ('%s', '%s', '%d', '%s', '%s')", uuid.New(), h.Filename, h.Size, h.Header, time.Now().Format(time.UnixDate)))
+	if err != nil {
+		return err
+	}
+	return nil
 }

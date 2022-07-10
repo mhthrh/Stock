@@ -19,15 +19,11 @@
 </head>
 <body>
 
-
-
 <h2>Api Services</h2>
 <br>
 <br>
-<div>
-    <label id="LBLResult"></label>
-</div>
-    <div class="row">
+
+<div class="row">
     <div class="column" style="background-color:#aaa;">
         <label>Country: </label><input id="InpUserCountry">
         <br>
@@ -41,45 +37,78 @@
         <button id="BtnSignIn">SignIn</button>
 
     </div>
-    <div class="column" style="background-color:#ccc;">
-
-        <label>SKU: </label><input id="SKU">
-        <br>
-        <br>
-        <label>Token: </label><input id="token">
-        <br>
-        <br>
-
-            <button id="BtnFind">Send</button>
-        </div>
     <div class="column" style="background-color:#bbb;">
-    <form
-            enctype="multipart/form-data"
-            action="http://localhost:9999/bulk"
-            method="post"
-    >
-        <input type="file" name="myFile" />
-        <input type="submit" value="upload" />
-    </form>
 
-</div>
+        <label>UserName: </label><input id="getUserName">
+        <br>
+        <br>
+        <label>Token: </label><input id="getToken">
+        <br>
+        <br>
+        <label>SKU: </label><input id="SKUget">
+        <br>
+        <br>
+
+            <button id="BtnSearch">Search</button>
+        </div>
+    <div class="column" style="background-color:#ccc;">
+            <label>UserName: </label><input id="fileUsername">
+            <br>
+            <br>
+            <label>Token </label><input id="fileToken">
+            <br>
+            <br>
+            <input id="file" type="file" onchange="sendFile(this)" >
+        </div>
     <div class="column" style="background-color:#ddd;">
-        <label>SKU: </label><input id="SKUInp">
+        <label>Username: </label><input id="usernamePut">
         <br>
         <br>
-        <label>Name : </label> <input id="Name" >
+        <label>Token : </label> <input id="tokenPut" >
         <br>
         <br>
-        <label>Count : </label> <input id="Count" >
+        <label>SKU: </label><input id="SKUput">
         <br>
         <br>
-        <button id="BtnSend">Search</button>
+        <label>Name : </label> <input id="NamePut" >
+        <br>
+        <br>
+        <label>Count : </label> <input id="CountPut" >
+        <br>
+        <br>
+        <button id="BtnSend">put item</button>
     </div>
 
 </div>
-
+<div>
+    <label id="LBLResult"></label>
+</div>
 <script >
 
+    function sendFile(e)
+    {
+        let aut = {
+            user:document.getElementById("fileUsername").value,
+            token:document.getElementById("fileToken").value
+        };
+       // console.log(aut)
+        let xhr = new XMLHttpRequest();
+
+        let formData = new FormData();
+        let file = e.files[0];
+
+        formData.append("aut", JSON.stringify(aut));
+        formData.append("file", file);
+
+        xhr.onreadystatechange = state => {
+            console.log(xhr.response);
+            document.getElementById('LBLResult').innerHTML = xhr.response;
+        } // err handling
+       // xhr.timeout = 50000;
+        xhr.open("POST", 'http://localhost:9999/bulk');
+        xhr.send(formData);
+
+    }
     document.getElementById("BtnSignIn").addEventListener("click", (e) => {
         let Country = document.getElementById("InpUserCountry");
         let User = document.getElementById("InpUserNameSignIn");
@@ -94,6 +123,7 @@
                 "username"   :User.value,
                 "password"   :Pass.value,
             }),
+
         })
             .then(function (response){
                 return response.text()
@@ -103,15 +133,16 @@
                 document.getElementById('LBLResult').innerHTML = data;
             });
     })
-    document.getElementById("BtnFind").addEventListener("click", (e) => {
-        fetch('http://localhost:9999/get', {
+    document.getElementById("BtnSearch").addEventListener("click", (e) => {
+        fetch('http://localhost:9999/search', {
             method: 'POST',
             headers: {
                 "Content-Type": "application/json; charset=UTF-8",
             },
             body: JSON.stringify({
-                "sku"  :document.getElementById("SKU").value,
-                "token"  :document.getElementById("token").value
+                "username"  :document.getElementById("getUserName").value,
+                "token" :document.getElementById("getToken").value,
+                "sku"  :document.getElementById("SKUget").value,
             }),
         })
             .then(function (response){
@@ -123,7 +154,6 @@
             });
     })
     document.getElementById("BtnSend").addEventListener("click", (e) => {
-        console.log(document.getElementById("selectType").value)
         fetch('http://localhost:9999/put', {
             method: 'POST',
             headers: {
@@ -132,9 +162,11 @@
 
             body:
                 JSON.stringify({
-                        "sku"   : document.getElementById("SKUInp").value,
-                        "name"   : document.getElementById("Name").value,
-                        "Count"   :parseInt(document.getElementById("Count").value)
+                    "username"   : document.getElementById("usernamePut").value,
+                    "token"   : document.getElementById("tokenPut").value,
+                    "sku"   : document.getElementById("SKUput").value,
+                    "name"   : document.getElementById("NamePut").value,
+                    "Count"   :parseInt(document.getElementById("CountPut").value),
                 }),
         })
             .then(function (response){
