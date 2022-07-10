@@ -103,16 +103,20 @@ func (t *tool) CheckSignKey(user, token string) (bool, error) {
 
 }
 
-func (t *tool) GetCountry(token string) (string, error) {
+func (t *tool) UserDetail(token string) (Login, error) {
 	k := CryptoUtil.NewKey()
 	k.Text = token
 	err := k.Decrypt()
 	if err != nil {
-		return "", err
+		return Login{}, err
 	}
 	spl := strings.Split(k.Result, "#")
 	if len(spl) != 3 {
-		return "", fmt.Errorf("parsing error")
+		return Login{}, fmt.Errorf("parsing error")
 	}
-	return spl[0], nil
+	return Login{
+		CountryCode: spl[0],
+		Username:    spl[1],
+		Password:    "paspaspaspas",
+	}, nil
 }

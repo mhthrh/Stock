@@ -1,6 +1,7 @@
 package Stock
 
 import (
+	"Github.com/mhthrh/Stock/Model/User"
 	"Github.com/mhthrh/Stock/Utilitys/DbUtil/PgSql"
 	"database/sql"
 	"fmt"
@@ -26,14 +27,14 @@ type Search struct {
 	Username string `json:"username" validate:"required"`
 	Token    string `json:"token" validate:"required,base64"`
 	Sku      string `json:"sku" validate:"required,alphanum"`
-	Country  string `json:"country"`
+	Usr      User.Login
 }
 type Item struct {
 	Username string `json:"username" validate:"required"`
-	Name     string `json:"name" validate:"required"`
 	Token    string `json:"token" validate:"required,base64"`
 	Sku      string `json:"sku" validate:"required,alphanum"`
 	Count    int    `json:"count" validate:"required,numeric,gt=0"`
+	Usr      User.Login
 }
 type tool struct {
 	db *sql.DB
@@ -50,7 +51,7 @@ func New(db *sql.DB) *tool {
 
 func (t *tool) Search(s *Search) (Stock, error) {
 	var result Stock
-	rows, err := PgSql.RunQuery(t.db, fmt.Sprintf("SELECT  c.name, s.name, s.sku, s.count FROM public.stock s inner join  public.country c on s.country=c.shortname where s.country='%s' and s.sku='%s'", s.Country, s.Sku))
+	rows, err := PgSql.RunQuery(t.db, fmt.Sprintf("SELECT c.name,s.name,s.sku,s.count FROM public.stock s inner join  public.country c on s.country=c.shortname where s.country='%s' and s.sku='%s'", s.Usr.CountryCode, s.Sku))
 	defer rows.Close()
 	if err != nil {
 		return Stock{}, err
@@ -63,22 +64,57 @@ func (t *tool) Search(s *Search) (Stock, error) {
 
 	return Stock{}, fmt.Errorf("cant find sku")
 }
-func (t *tool) Put(i *Item) error {
+func (t *tool) Consume(i *Item) error {
+	commit := false
+	count := 0
+	transaction, err := t.db.Begin()
 
-	result, err := PgSql.ExecuteCommand(fmt.Sprintf("insert into "), t.db)
 	if err != nil {
 		return err
 	}
-
-	count, err := (*result).RowsAffected()
+	defer func(tx *sql.Tx) {
+		if !commit {
+			tx.Rollback()
+			return
+		}
+		tx.Commit()
+	}(transaction)
+	rows, err := transaction.Query(fmt.Sprintf("SELECT count FROM public.stock where country ='%s' and sku='%s'", i.Usr.CountryCode, i.Sku))
 	if err != nil {
+		commit = false
 		return err
 	}
-	if count != 1 {
-		return fmt.Errorf("not added")
+	if rows.Next() {
+		rows.Scan(&count)
 	}
+	if count-i.Count < 0 {
+		return fmt.Errorf("count is more than stock")
+	}
+	result, err := transaction.Exec(fmt.Sprintf("INSERT INTO public.market(id, userid, stockid, count, datetime) select gen_random_uuid(),(SELECT \"ID\" FROM public.\"Users\" where \"UserName\"='%s' ),(select  id from public.stock where country='%s' and sku='%s'),'%d',CURRENT_TIMESTAMP", i.Usr.Username, i.Usr.CountryCode, i.Sku, i.Count))
+	if err != nil {
+		commit = false
+		return err
+	}
+	cnt, _ := result.RowsAffected()
+	if cnt != 1 {
+		commit = false
+		return fmt.Errorf("cant insert to table")
+	}
+	result, err = transaction.Exec(fmt.Sprintf("UPDATE public.stock SET  count=count-'%d' WHERE country='%s' and sku='%s' and count-'%d'>0", i.Count, i.Usr.CountryCode, i.Sku, i.Count))
+	if err != nil {
+		commit = false
+		return err
+	}
+	cnt, _ = result.RowsAffected()
+	if cnt != 1 {
+		commit = false
+		return fmt.Errorf("error in update")
+	}
+
+	commit = true
 	return nil
 }
+
 func (t *tool) Bulk(stock []Stock) ([]Stock, error) {
 
 	const GoRoutines = 40
@@ -142,7 +178,6 @@ func (t *tool) insert(chn chan Message) {
 			slice: stocks,
 			cnn:   trans,
 		}
-
 	}()
 	for index, s := range stocks {
 

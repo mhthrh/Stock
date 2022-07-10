@@ -109,21 +109,22 @@ func (c *Controller) MiddleWare(next http.Handler) http.Handler {
 				Result.New(1, http.StatusOK, err.Error()).SendResponse(w)
 				return
 			}
-			country, err := User.New(d.Db).GetCountry(obj1.Token)
+			usr, err := User.New(d.Db).UserDetail(obj1.Token)
 			if err != nil {
 				Result.New(1, http.StatusOK, err.Error()).SendResponse(w)
 				return
 			}
-			obj1.Country = country
+			obj1.Usr = usr
 			c.db.Push(d)
 			errs := c.validation.Validate(obj1)
 			if len(errs) > 0 {
 				j := JsonUtil.New(nil, nil).Struct2Json(ValidationError{Messages: errs.Errors()}.Messages)
 				Result.New(1004, http.StatusUnprocessableEntity, j).SendResponse(w)
+				return
 			}
 			r = r.WithContext(context.WithValue(r.Context(), Key{}, obj1))
 			next.ServeHTTP(w, r)
-		case "/put":
+		case "/consume":
 			var obj1 Stock.Item
 			err := json.NewDecoder(r.Body).Decode(&obj1)
 			if err != nil {
@@ -136,11 +137,18 @@ func (c *Controller) MiddleWare(next http.Handler) http.Handler {
 				Result.New(1, http.StatusOK, err.Error()).SendResponse(w)
 				return
 			}
+			usr, err := User.New(d.Db).UserDetail(obj1.Token)
+			if err != nil {
+				Result.New(1, http.StatusOK, err.Error()).SendResponse(w)
+				return
+			}
+			obj1.Usr = usr
 			c.db.Push(d)
 			errs := c.validation.Validate(obj1)
 			if len(errs) > 0 {
 				j := JsonUtil.New(nil, nil).Struct2Json(ValidationError{Messages: errs.Errors()}.Messages)
 				Result.New(1004, http.StatusUnprocessableEntity, j).SendResponse(w)
+				return
 			}
 			r = r.WithContext(context.WithValue(r.Context(), Key{}, obj1))
 			next.ServeHTTP(w, r)
@@ -207,17 +215,17 @@ func (c *Controller) Search(w http.ResponseWriter, r *http.Request) {
 	}
 	Result.New(1, http.StatusOK, JsonUtil.New(nil, nil).Struct2Json(stock)).SendResponse(w)
 }
-func (c *Controller) Put(w http.ResponseWriter, r *http.Request) {
-	s := r.Context().Value(Key{}).(Stock.Item)
+func (c *Controller) Consume(w http.ResponseWriter, r *http.Request) {
+	i := r.Context().Value(Key{}).(Stock.Item)
 
 	d := c.db.Pull()
-	err := Stock.New(d.Db).Put(&s)
+	err := Stock.New(d.Db).Consume(&i)
 
 	if err != nil {
 		Result.New(1010, http.StatusBadRequest, err.Error()).SendResponse(w)
 		return
 	}
-	Result.New(1, http.StatusOK, "item inserted").SendResponse(w)
+	Result.New(1, http.StatusOK, "success").SendResponse(w)
 }
 
 func fileCheck(h *multipart.FileHeader, d *DbPool.DB) error {
