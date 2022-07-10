@@ -37,10 +37,22 @@ func New(db *sql.DB) *tool {
 }
 
 func (t *tool) SignIn(l *Login) (string, error) {
+	var Countt int
 	SignedPassword := CryptoUtil.NewKey()
 	SignedPassword.Text = l.Password
 	SignedPassword.Sha256()
-	rows, err := PgSql.RunQuery(t.db, fmt.Sprintf("SELECT \"ID\", \"UserName\" FROM public.\"Users\" where \"UserName\"='%s' and \"Password\"='%s'", l.Username, SignedPassword.Result))
+
+	rows, err := PgSql.RunQuery(t.db, fmt.Sprintf("SELECT count(*) FROM public.country where shortname='%s'", l.CountryCode))
+	if err != nil {
+		return "", err
+	}
+	if rows.Next() {
+		rows.Scan(&Countt)
+	}
+	if Countt != 1 {
+		return "", fmt.Errorf("country not found")
+	}
+	rows, err = PgSql.RunQuery(t.db, fmt.Sprintf("SELECT \"ID\", \"UserName\" FROM public.\"Users\" where \"UserName\"='%s' and \"Password\"='%s'", l.Username, SignedPassword.Result))
 	if err != nil {
 		return "", err
 	}

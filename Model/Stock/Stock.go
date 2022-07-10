@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"github.com/google/uuid"
 	"sort"
-	"time"
 )
 
 type Stock struct {
@@ -39,11 +38,6 @@ type Item struct {
 type tool struct {
 	db *sql.DB
 }
-
-var (
-	validationDuration = 180 * time.Second
-	dateFormat         = time.UnixDate
-)
 
 func New(db *sql.DB) *tool {
 	return &tool{db: db}
@@ -79,6 +73,7 @@ func (t *tool) Consume(i *Item) error {
 		}
 		tx.Commit()
 	}(transaction)
+
 	rows, err := transaction.Query(fmt.Sprintf("SELECT count FROM public.stock where country ='%s' and sku='%s'", i.Usr.CountryCode, i.Sku))
 	if err != nil {
 		commit = false
@@ -116,14 +111,13 @@ func (t *tool) Consume(i *Item) error {
 }
 
 func (t *tool) Bulk(stock []Stock) ([]Stock, error) {
-
-	const GoRoutines = 40
+	const GoRoutines = 1
 	var k, j int
 	step := len(stock) / GoRoutines
 	j = step
 	chn := make(chan Message)
 	commit := true
-	var t2 []Stock
+	var resultStock []Stock
 	sort.SliceStable(stock, func(i, j int) bool {
 		return stock[i].Count > stock[j].Count
 	})
@@ -155,17 +149,14 @@ func (t *tool) Bulk(stock []Stock) ([]Stock, error) {
 		} else {
 			j = j + step
 		}
-
 	}
-
 	for i := 0; i < GoRoutines; i++ {
 		result := <-chn
-		t2 = append(t2, result.slice...)
+		resultStock = append(resultStock, result.slice...)
 	}
-	return t2, nil
+	return resultStock, nil
 }
 func (t *tool) insert(chn chan Message) {
-
 	var trans *sql.Tx
 	var stocks []Stock
 	select {
@@ -181,24 +172,33 @@ func (t *tool) insert(chn chan Message) {
 	}()
 	for index, s := range stocks {
 
-		u, _ := uuid.NewUUID()
-		result, err := trans.Exec(fmt.Sprintf("INSERT INTO public.stock( id, country, name, sku, Count) SELECT '%s', '%s', '%s', '%s', '%d' WHERE NOT EXISTS (SELECT id FROM public.stock where country='%s' and sku='%s')", u, s.Country, s.Name, s.SKU, s.Count, s.Country, s.SKU))
+		fmt.Println("insert to db ", s)
+
+		ddd := fmt.Sprintf("UPDATE public.stock SET  Count=Count+'%d' WHERE country='%s' and sku='%s' and count+'%d'>=0", s.Count, s.Country, s.SKU, s.Count)
+		result, err := trans.Exec(ddd)
 		if err != nil {
 			s.Result = err.Error()
 			continue
 		}
 		i, err := result.RowsAffected()
-		if err != nil {
-			s.Result = err.Error()
-			continue
-		}
+
 		if i == 0 {
-			ddd := fmt.Sprintf("UPDATE public.stock SET  Count=Count+'%d' WHERE country='%s' and sku='%s'", s.Count, s.Country, s.SKU)
-			_, err = trans.Exec(ddd)
+			if s.Count <= 0 {
+				s.Result = "cannot be less than zero"
+				continue
+			}
+			u, _ := uuid.NewUUID()
+			result, err := trans.Exec(fmt.Sprintf("INSERT INTO public.stock( id, country, name, sku, Count) SELECT '%s', '%s', '%s', '%s', '%d' WHERE NOT EXISTS (SELECT id FROM public.stock where country='%s' and sku='%s')", u, s.Country, s.Name, s.SKU, s.Count, s.Country, s.SKU))
 			if err != nil {
 				s.Result = err.Error()
 				continue
 			}
+			i, err = result.RowsAffected()
+			if err != nil {
+				s.Result = err.Error()
+				continue
+			}
+
 			stocks[index].Result = "Updated"
 		} else {
 			stocks[index].Result = "Inserted"

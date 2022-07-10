@@ -29,4 +29,5 @@ func (r *Response) SendResponse(w http.ResponseWriter) {
 	w.Write([]byte(JsonUtil.New(nil, nil).Struct2Json(r.Body)))
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
 	w.WriteHeader(r.Header.HStatus)
+
 }

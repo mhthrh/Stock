@@ -59,14 +59,17 @@ func (c *Controller) MiddleWare(next http.Handler) http.Handler {
 			var obj1 User.Login
 			err := json.NewDecoder(r.Body).Decode(&obj1)
 			if err != nil {
-				Result.New(1003, http.StatusBadRequest, GenericError{Message: err.Error()}.Message).SendResponse(w)
+				Result.New(1001, http.StatusBadRequest, GenericError{Message: err.Error()}.Message).SendResponse(w)
+				c.logger.Logger.Println("error ", err)
 				return
 
 			}
 			errs := c.validation.Validate(obj1)
 			if len(errs) > 0 {
 				j := JsonUtil.New(nil, nil).Struct2Json(ValidationError{Messages: errs.Errors()}.Messages)
-				Result.New(1004, http.StatusUnprocessableEntity, j).SendResponse(w)
+				Result.New(1002, http.StatusUnprocessableEntity, j).SendResponse(w)
+				c.logger.Logger.Println("error ", err)
+				return
 			}
 			r = r.WithContext(context.WithValue(r.Context(), Key{}, obj1))
 			next.ServeHTTP(w, r)
@@ -76,7 +79,8 @@ func (c *Controller) MiddleWare(next http.Handler) http.Handler {
 			d := c.db.Pull()
 			_, err := User.New(d.Db).CheckSignKey(aut.User, aut.Token)
 			if err != nil {
-				Result.New(1, http.StatusOK, err.Error()).SendResponse(w)
+				Result.New(1003, http.StatusOK, err.Error()).SendResponse(w)
+				c.logger.Logger.Println("error ", err)
 				return
 			}
 			c.db.Push(d)
@@ -84,12 +88,14 @@ func (c *Controller) MiddleWare(next http.Handler) http.Handler {
 			file, handler, err := r.FormFile("file")
 			defer file.Close()
 			if err != nil {
-				Result.New(1, http.StatusOK, err.Error()).SendResponse(w)
+				Result.New(1004, http.StatusOK, err.Error()).SendResponse(w)
+				c.logger.Logger.Println("error ", err)
 				return
 			}
 			d = c.db.Pull()
 			if err := fileCheck(handler, d); err != nil {
-				Result.New(1, http.StatusOK, err.Error()).SendResponse(w)
+				Result.New(1022, http.StatusAlreadyReported, err.Error()).SendResponse(w)
+				c.logger.Logger.Println("error ", err)
 				return
 			}
 			c.db.Push(d)
@@ -100,18 +106,21 @@ func (c *Controller) MiddleWare(next http.Handler) http.Handler {
 			var obj1 Stock.Search
 			err := json.NewDecoder(r.Body).Decode(&obj1)
 			if err != nil {
-				Result.New(1003, http.StatusBadRequest, GenericError{Message: err.Error()}.Message).SendResponse(w)
+				Result.New(1005, http.StatusBadRequest, GenericError{Message: err.Error()}.Message).SendResponse(w)
+				c.logger.Logger.Println("error ", err)
 				return
 			}
 			d := c.db.Pull()
 			_, err = User.New(d.Db).CheckSignKey(obj1.Username, obj1.Token)
 			if err != nil {
-				Result.New(1, http.StatusOK, err.Error()).SendResponse(w)
+				Result.New(1006, http.StatusForbidden, err.Error()).SendResponse(w)
+				c.logger.Logger.Println("error ", err)
 				return
 			}
 			usr, err := User.New(d.Db).UserDetail(obj1.Token)
 			if err != nil {
-				Result.New(1, http.StatusOK, err.Error()).SendResponse(w)
+				Result.New(1007, http.StatusForbidden, err.Error()).SendResponse(w)
+				c.logger.Logger.Println("error ", err)
 				return
 			}
 			obj1.Usr = usr
@@ -119,7 +128,8 @@ func (c *Controller) MiddleWare(next http.Handler) http.Handler {
 			errs := c.validation.Validate(obj1)
 			if len(errs) > 0 {
 				j := JsonUtil.New(nil, nil).Struct2Json(ValidationError{Messages: errs.Errors()}.Messages)
-				Result.New(1004, http.StatusUnprocessableEntity, j).SendResponse(w)
+				Result.New(1008, http.StatusUnprocessableEntity, j).SendResponse(w)
+				c.logger.Logger.Println("error ", err)
 				return
 			}
 			r = r.WithContext(context.WithValue(r.Context(), Key{}, obj1))
@@ -128,18 +138,20 @@ func (c *Controller) MiddleWare(next http.Handler) http.Handler {
 			var obj1 Stock.Item
 			err := json.NewDecoder(r.Body).Decode(&obj1)
 			if err != nil {
-				Result.New(1003, http.StatusBadRequest, GenericError{Message: err.Error()}.Message).SendResponse(w)
+				Result.New(1009, http.StatusBadRequest, GenericError{Message: err.Error()}.Message).SendResponse(w)
 				return
 			}
 			d := c.db.Pull()
 			_, err = User.New(d.Db).CheckSignKey(obj1.Username, obj1.Token)
 			if err != nil {
-				Result.New(1, http.StatusOK, err.Error()).SendResponse(w)
+				Result.New(1010, http.StatusForbidden, err.Error()).SendResponse(w)
+				c.logger.Logger.Println("error ", err)
 				return
 			}
 			usr, err := User.New(d.Db).UserDetail(obj1.Token)
 			if err != nil {
-				Result.New(1, http.StatusOK, err.Error()).SendResponse(w)
+				Result.New(1011, http.StatusForbidden, err.Error()).SendResponse(w)
+				c.logger.Logger.Println("error ", err)
 				return
 			}
 			obj1.Usr = usr
@@ -147,13 +159,14 @@ func (c *Controller) MiddleWare(next http.Handler) http.Handler {
 			errs := c.validation.Validate(obj1)
 			if len(errs) > 0 {
 				j := JsonUtil.New(nil, nil).Struct2Json(ValidationError{Messages: errs.Errors()}.Messages)
-				Result.New(1004, http.StatusUnprocessableEntity, j).SendResponse(w)
+				Result.New(1012, http.StatusUnprocessableEntity, j).SendResponse(w)
+				c.logger.Logger.Println("error ", err)
 				return
 			}
 			r = r.WithContext(context.WithValue(r.Context(), Key{}, obj1))
 			next.ServeHTTP(w, r)
 		default:
-			Result.New(1, http.StatusNotFound, "address not found").SendResponse(w)
+			Result.New(1013, http.StatusNotFound, "address not found").SendResponse(w)
 
 		}
 	})
@@ -166,7 +179,8 @@ func (c *Controller) SignIn(w http.ResponseWriter, r *http.Request) {
 	response, err := User.New(d.Db).SignIn(&u)
 	c.db.Push(d)
 	if err != nil {
-		Result.New(1010, http.StatusBadRequest, err.Error()).SendResponse(w)
+		Result.New(1014, http.StatusBadRequest, err.Error()).SendResponse(w)
+		c.logger.Logger.Println("error ", err)
 		return
 	}
 	Result.New(1, http.StatusOK, JsonUtil.New(nil, nil).Struct2Json(response)).SendResponse(w)
@@ -194,14 +208,17 @@ func (c *Controller) Bulk(w http.ResponseWriter, r *http.Request) {
 		line.Name = strings.Replace(spl[2], "\"", "", -1)
 		line.Count, _ = strconv.ParseInt(strings.Replace(spl[3], "\"", "", -1), 10, 64)
 		Lines = append(Lines, line)
+		c.logger.Logger.Println("reading file ", line)
 	}
 	d := c.db.Pull()
 	rr, err := Stock.New(d.Db).Bulk(Lines)
 	c.db.Push(d)
-	if err == nil {
-		Result.New(1, http.StatusOK, JsonUtil.New(nil, nil).Struct2Json(rr)).SendResponse(w)
+	if err != nil {
+		Result.New(1020, http.StatusConflict, err).SendResponse(w)
+		c.logger.Logger.Println("error ", err)
+		return
 	}
-
+	Result.New(1, http.StatusOK, JsonUtil.New(nil, nil).Struct2Json(rr)).SendResponse(w)
 }
 func (c *Controller) Search(w http.ResponseWriter, r *http.Request) {
 	s := r.Context().Value(Key{}).(Stock.Search)
@@ -210,7 +227,8 @@ func (c *Controller) Search(w http.ResponseWriter, r *http.Request) {
 	stock, err := Stock.New(d.Db).Search(&s)
 	c.db.Push(d)
 	if err != nil {
-		Result.New(1010, http.StatusBadRequest, err.Error()).SendResponse(w)
+		Result.New(1016, http.StatusBadRequest, err.Error()).SendResponse(w)
+		c.logger.Logger.Println("error ", err)
 		return
 	}
 	Result.New(1, http.StatusOK, JsonUtil.New(nil, nil).Struct2Json(stock)).SendResponse(w)
@@ -222,7 +240,8 @@ func (c *Controller) Consume(w http.ResponseWriter, r *http.Request) {
 	err := Stock.New(d.Db).Consume(&i)
 
 	if err != nil {
-		Result.New(1010, http.StatusBadRequest, err.Error()).SendResponse(w)
+		Result.New(1017, http.StatusBadRequest, err.Error()).SendResponse(w)
+		c.logger.Logger.Println("error ", err)
 		return
 	}
 	Result.New(1, http.StatusOK, "success").SendResponse(w)
