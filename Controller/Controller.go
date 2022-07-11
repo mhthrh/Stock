@@ -20,12 +20,6 @@ import (
 	"time"
 )
 
-var (
-	handler http.HandlerFunc
-	obj     interface{}
-	timeOut = 5000 * time.Millisecond
-)
-
 type GenericError struct {
 	Message string `json:"message"`
 }

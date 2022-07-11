@@ -109,7 +109,6 @@ func (t *tool) Consume(i *Item) error {
 	commit = true
 	return nil
 }
-
 func (t *tool) Bulk(stock []Stock) ([]Stock, error) {
 	const GoRoutines = 1
 	var k, j int
@@ -154,6 +153,7 @@ func (t *tool) Bulk(stock []Stock) ([]Stock, error) {
 		result := <-chn
 		resultStock = append(resultStock, result.slice...)
 	}
+
 	return resultStock, nil
 }
 func (t *tool) insert(chn chan Message) {

@@ -37,7 +37,7 @@ func New(db *sql.DB) *tool {
 }
 
 func (t *tool) SignIn(l *Login) (string, error) {
-	var Countt int
+	var Count int
 	SignedPassword := CryptoUtil.NewKey()
 	SignedPassword.Text = l.Password
 	SignedPassword.Sha256()
@@ -47,9 +47,9 @@ func (t *tool) SignIn(l *Login) (string, error) {
 		return "", err
 	}
 	if rows.Next() {
-		rows.Scan(&Countt)
+		rows.Scan(&Count)
 	}
-	if Countt != 1 {
+	if Count != 1 {
 		return "", fmt.Errorf("country not found")
 	}
 	rows, err = PgSql.RunQuery(t.db, fmt.Sprintf("SELECT \"ID\", \"UserName\" FROM public.\"Users\" where \"UserName\"='%s' and \"Password\"='%s'", l.Username, SignedPassword.Result))

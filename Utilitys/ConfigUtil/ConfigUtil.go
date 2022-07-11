@@ -72,7 +72,7 @@ func ReadConfig(file string) *Config {
 
 func WriteConfig() {
 	cfg := &Config{
-		AppName:    "GeneralLedger",
+		AppName:    "Stock",
 		IsTest:     true,
 		Version:    "1.0.0",
 		ExpireDate: "01-01-2023",
@@ -84,7 +84,7 @@ func WriteConfig() {
 				UserName: "postgres",
 				Password: "123456",
 			},
-			Dbname: "GL",
+			Dbname: "Stock",
 			Driver: "postgres",
 		}, {
 			Name: "Oracle",
